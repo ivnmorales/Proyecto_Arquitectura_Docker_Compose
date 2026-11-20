@@ -1,0 +1,118 @@
+# Orquestación de la solución de microservicios:
+#   - Festivos: API Node.js + Express (MVC) con base de datos MongoDB
+#   - Calendario: API Spring Boot (Onion) con base de datos PostgreSQL,
+#     que consume la API Festivos para clasificar los días del año
+#
+# Ejecutar desde esta carpeta:
+#   docker compose up --build -d
+
+services:
+
+  # ==========================================
+  # Base de datos de Festivos (MongoDB)
+  # ==========================================
+  bdfestivos:
+    image: mongo:8
+    container_name: dockerbdfestivos
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+      # Se ejecuta solo la primera vez (volumen vacío) para crear y poblar la base festivos
+      - ./bdfestivos/iniciarbdfestivos.js:/docker-entrypoint-initdb.d/iniciarbdfestivos.js:ro
+    networks:
+      - redfestivos
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ==========================================
+  # API Festivos (Node.js + Express)
+  # ==========================================
+  apifestivos:
+    build: ./apifestivos
+    container_name: dockerapifestivos
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      MONGO_URI: mongodb://bdfestivos:27017/festivos
+    ports:
+      - "8080:8080"
+    networks:
+      - redfestivos
+    depends_on:
+      bdfestivos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ==========================================
+  # Base de datos de Calendario (PostgreSQL)
+  # ==========================================
+  bdcalendario:
+    build: ./bdcalendario
+    container_name: dockerbdcalendario
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sa}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - redfestivos
+    healthcheck:
+      # Sano solo cuando los scripts DDL y DML ya crearon la tabla Tipo
+      test: ["CMD-SHELL", "psql -U postgres -d calendariolaboral -tAc 'SELECT 1 FROM tipo LIMIT 1' | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ==========================================
+  # API Calendario (Spring Boot)
+  # ==========================================
+  apicalendario:
+    build: ./apicalendario
+    container_name: dockerapicalendario
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8081
+      DB_URL: jdbc:postgresql://bdcalendario:5432/calendariolaboral
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sa}
+      FESTIVOS_API_URL: http://apifestivos:8080/api/festivos
+    ports:
+      - "8081:8081"
+    networks:
+      - redfestivos
+    depends_on:
+      bdcalendario:
+        condition: service_healthy
+      # Decisión de arquitectura: Calendario no depende de que Festivos esté arriba.
+      # Sin Festivos sigue respondiendo la consulta del calendario y el CRUD de Tipo;
+      # solo la generación responde 502 hasta que Festivos vuelva.
+      # apifestivos:
+      #   condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/v3/api-docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  redfestivos:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  postgres_data:

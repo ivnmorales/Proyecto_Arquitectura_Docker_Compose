@@ -1,0 +1,9 @@
+# Las dependencias se instalan dentro de la imagen
+node_modules
+npm-debug.log
+
+# La configuración local (localhost) no se copia a la imagen
+.env
+
+Dockerfile
+.dockerignore

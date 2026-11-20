@@ -1,0 +1,7 @@
+# La compilación se hace dentro de la imagen
+**/target
+.idea
+.vscode
+*.iml
+Dockerfile
+.dockerignore
