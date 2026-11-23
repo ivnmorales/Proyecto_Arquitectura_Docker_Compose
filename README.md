@@ -122,6 +122,32 @@ docker compose logs -f
 
 > Los scripts de las bases de datos se ejecutan **solo la primera vez**, cuando los volúmenes están vacíos. Para empezar de cero se usa `docker compose down -v`.
 
+### Si aparece `failed to execute bake`
+
+Algunas versiones de Docker Compose (por ejemplo 2.38 de Docker Desktop) construyen con *bake* y pueden fallar con `failed to execute bake: read |0: file already closed`. No es un error del proyecto: basta con desactivar *bake* en la terminal y volver a ejecutar.
+
+PowerShell:
+
+```powershell
+$env:COMPOSE_BAKE = "false"
+```
+
+CMD:
+
+```bat
+set COMPOSE_BAKE=false
+```
+
+Git Bash:
+
+```bash
+export COMPOSE_BAKE=false
+```
+
+```bash
+docker compose up --build -d
+```
+
 ---
 
 # Decisiones de la orquestación
@@ -201,18 +227,52 @@ Resultado contra la orquestación: **73 de 73** y **94 de 94** pruebas aprobadas
 
 # Evidencias de ejecución
 
-Las capturas se guardan en `docs/evidencias/`:
+Capturas guardadas en `docs/evidencias/`.
 
-| # | Evidencia | Archivo |
-|---|---|---|
-| 1 | Ejecución de `docker compose up --build -d` | `01-compose-up.png` |
-| 2 | `docker compose ps` con los 4 servicios `healthy` | `02-compose-ps.png` |
-| 3 | Docker Desktop con los 4 contenedores, imágenes y volúmenes | `03-docker-desktop.png` |
-| 4 | Swagger de la API Festivos ejecutando `obtener/2027` | `04-swagger-festivos.png` |
-| 5 | Swagger de la API Calendario | `05-swagger-calendario.png` |
-| 6 | Integración: `generar/2027` y `obtener/2027` | `06-integracion-2027.png` |
-| 7 | Collection Runner de Festivos (73/73) | `07-postman-festivos.png` |
-| 8 | Collection Runner de Calendario (94/94) | `08-postman-calendario.png` |
-| 9 | Bases de datos en Compass (27018) y pgAdmin (5433) | `09-bases-de-datos.png` |
-| 10 | `docker compose up --build -d apifestivos` (reconstruir un solo servicio) | `10-rebuild-servicio.png` |
-| 11 | Calendario respondiendo con Festivos detenido (`obtener` 200, `generar` 502) | `11-caida-festivos.png` |
+## 1. Creación con `docker compose up --build -d`
+
+Se construyen las 3 imágenes propias, se crean la red y los 2 volúmenes, las bases de datos quedan sanas (`Healthy`) y después se inician las APIs que dependen de ellas.
+
+![Creación con docker compose up](docs/evidencias/01-compose-up.png)
+
+## 2. Ejecución: `docker compose ps`
+
+Los 4 servicios en ejecución y `healthy`, con sus puertos publicados.
+
+![docker compose ps](docs/evidencias/02-compose-ps.png)
+
+## 3. Docker Desktop
+
+Los 4 contenedores del proyecto agrupados y en ejecución.
+
+![Docker Desktop](docs/evidencias/03-docker-desktop.png)
+
+## 4. Swagger de la API Festivos
+
+Disponible en `http://localhost:8080/api-docs`, con la URL de servidor relativa (`/ - Servidor actual`).
+
+![Swagger API Festivos](docs/evidencias/04-swagger-festivos.png)
+
+## 5. Integración: generar el calendario 2027
+
+`POST /api/calendario/generar/2027` desde el Swagger de la API Calendario. Para responder `true`, la API Calendario consulta los festivos de 2027 a la API Festivos (que los calcula desde MongoDB) y guarda los 365 días en PostgreSQL.
+
+![Generar calendario 2027](docs/evidencias/05-calendario-generar-2027.png)
+
+![Respuesta de generar 2027](docs/evidencias/06-calendario-generar-2027-respuesta.png)
+
+## 6. Integración: obtener el calendario 2027
+
+`GET /api/calendario/obtener/2027` devuelve los días guardados en PostgreSQL, hasta el `2027-12-31` (Id 365).
+
+![Obtener calendario 2027](docs/evidencias/07-calendario-obtener-2027.png)
+
+![Respuesta de obtener 2027](docs/evidencias/08-calendario-obtener-2027-respuesta.png)
+
+## 7. Postman - API Festivos (73/73)
+
+![Postman API Festivos](docs/evidencias/09-postman-festivos-73.png)
+
+## 8. Postman - API Calendario (94/94)
+
+![Postman API Calendario](docs/evidencias/10-postman-calendario-94.png)
